@@ -705,28 +705,6 @@ function parseTeacherListCSV(text) {
   return out;
 }
 
-function parseVolTextCSV(text) {
-  const lines = String(text || '').replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-  const map = new Map();
-  for (let i=0;i<lines.length;i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const parts = line.split(',');
-    const k = String(parts[0] ?? '').trim();
-    const v = String(parts.slice(1).join(',') ?? '').trim();
-    if (!k) continue;
-    map.set(k, v);
-  }
-  return map;
-}
-
-async function loadVolText() {
-  const res = await fetch('vol_text.csv', { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  return parseVolTextCSV(text);
-}
-
 let adm     = lsLoad(LS_ADM, DEFAULT_ADM);
 let classes = lsLoad(LS_CLS, DEFAULT_CLS);
 let att     = lsLoad(LS_ATT, {});
@@ -1799,28 +1777,6 @@ function printYV() {
 async function initApp() {
   const loadedFromURL = loadFromURL();
   if (!loadedFromURL) {
-    try {
-      const vt = await loadVolText();
-      const areaMap = { '이웃돕기':'이웃돕기활동', '환경보호':'환경보호활동', '캠페인':'캠페인활동', '기타':'기타활동' };
-      const areaVal = vt.get('봉사영역') || '';
-      adm = {
-        ...adm,
-        school: vt.get('학교명') || adm.school,
-        phone: vt.get('기관연락처') || adm.phone,
-        type: vt.get('봉사구분') || adm.type,
-        area: areaMap[areaVal] || areaVal || adm.area,
-        ds: vt.get('봉사시작일') || adm.ds,
-        de: vt.get('봉사종료일') || adm.de,
-        org: vt.get('봉사기관') || adm.org,
-        place: vt.get('활동장소') || adm.place,
-        act: vt.get('활동내용') || adm.act,
-        time: vt.get('기본 인정시간') || adm.time,
-      };
-      lsSave(LS_ADM, adm);
-    } catch (e) {
-      if (String(location.protocol) === 'file:') showToast('CSV 연동은 로컬 서버에서만 동작합니다');
-    }
-
     document.getElementById('a-school').value = adm.school;
     document.getElementById('a-phone').value  = adm.phone;
     document.getElementById('a-ds').value     = adm.ds;
