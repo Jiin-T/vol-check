@@ -709,6 +709,72 @@ let adm     = lsLoad(LS_ADM, DEFAULT_ADM);
 let classes = lsLoad(LS_CLS, DEFAULT_CLS);
 let att     = lsLoad(LS_ATT, {});
 
+async function applyVolTextToAdm() {
+  try {
+    const res = await fetch('vol_text.csv', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const map = parseVolTextCSV(text);
+    if (!map.size) return false;
+
+    const keyMap = {
+      '학교명': 'school',
+      '기관연락처': 'phone',
+      '기관 연락처': 'phone',
+      '봉사구분': 'type',
+      '봉사 구분': 'type',
+      '봉사영역': 'area',
+      '봉사 영역': 'area',
+      '봉사시작일': 'ds',
+      '봉사 시작일': 'ds',
+      '봉사종료일': 'de',
+      '봉사 종료일': 'de',
+      '봉사기관': 'org',
+      '봉사 기관': 'org',
+      '활동장소': 'place',
+      '활동 장소': 'place',
+      '활동내용': 'act',
+      '활동 내용': 'act',
+      '기본인정시간': 'time',
+      '기본 인정시간': 'time'
+    };
+
+    let changed = false;
+    for (const [k, v] of map.entries()) {
+      const key = keyMap[k];
+      if (!key) continue;
+      const val = String(v ?? '').trim();
+      if (!val) continue;
+      if (String(adm[key] ?? '') !== val) {
+        adm[key] = val;
+        changed = true;
+      }
+    }
+
+    if (changed) lsSave(LS_ADM, adm);
+    return changed;
+  } catch (e) {
+    return false;
+  }
+}
+
+function parseVolTextCSV(text) {
+  const lines = String(text || '').replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const map = new Map();
+  for (let i=0;i<lines.length;i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const parts = line.split(',');
+    if (parts.length < 2) continue;
+    const k = String(parts[0] ?? '').trim();
+    const v = parts.slice(1).join(',').trim();
+    if (!k) continue;
+    if (k === '.') continue;
+    map.set(k, v);
+  }
+  return map;
+}
+
 let selAdm = classes[0]?.id || null;
 let selTch = null;
 
@@ -1777,19 +1843,8 @@ function printYV() {
 async function initApp() {
   const loadedFromURL = loadFromURL();
   if (!loadedFromURL) {
-    document.getElementById('a-school').value = adm.school;
-    document.getElementById('a-phone').value  = adm.phone;
-    document.getElementById('a-ds').value     = adm.ds;
-    document.getElementById('a-de').value     = adm.de;
-    document.getElementById('a-org').value    = adm.org;
-    document.getElementById('a-place').value  = adm.place;
-    document.getElementById('a-act').value    = adm.act;
-    document.getElementById('a-time').value   = adm.time;
-    document.querySelectorAll('#rg-type .rpill').forEach(p => p.classList.toggle('on', p.textContent.trim() === adm.type));
-    document.querySelectorAll('#rg-area .rpill').forEach(p => {
-      const map = {'이웃돕기':'이웃돕기활동','환경보호':'환경보호활동','캠페인':'캠페인활동','기타':'기타활동'};
-      p.classList.toggle('on', map[p.textContent.trim()] === adm.area || p.textContent.trim() === adm.area);
-    });
+    const changedByVolText = await applyVolTextToAdm();
+    updateAdminUI();
   }
 
   try {
