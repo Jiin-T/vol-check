@@ -358,7 +358,7 @@ body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--
   <div class="tab-switcher">
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 관리자 설정</button>
     <button class="tab-btn active" onclick="switchTab('teacher')">✏️ 출석 체크</button>
-    <button class="tab-btn" onclick="switchTab('yearVol')">📋 학년봉사활동</button>
+    <button class="tab-btn" disabled title="준비중" style="opacity:0.45;cursor:not-allowed">📋 학년봉사활동</button>
   </div>
 </div>
 
@@ -759,6 +759,10 @@ function updateAdminUI() {
 
 // ─── TABS ───
 function switchTab(t) {
+  if (t === 'yearVol') {
+    showToast('학년봉사활동 기능은 현재 비활성화되어 있습니다');
+    t = 'teacher';
+  }
   ['admin','teacher','yearVol'].forEach((x,i)=>{
     document.getElementById('page-'+x).classList.toggle('active', x===t);
     document.querySelectorAll('.tab-btn')[i].classList.toggle('active', x===t);
