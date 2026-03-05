@@ -352,12 +352,12 @@ body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--
 <div class="app-header">
   <div class="logo">📋</div>
   <div class="header-title">
-    <h1>단체봉사활동 확인서</h1>
+    <h1>봉사활동 확인서</h1>
     <p>School Volunteer Certificate System</p>
   </div>
   <div class="tab-switcher">
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 관리자 설정</button>
-    <button class="tab-btn active" onclick="switchTab('teacher')">✏️ 출석 체크</button>
+    <button class="tab-btn active" onclick="switchTab('teacher')">✏️ 단체 봉사활동</button>
     <button class="tab-btn" disabled title="준비중" style="opacity:0.45;cursor:not-allowed">📋 학년봉사활동</button>
   </div>
 </div>
@@ -648,6 +648,61 @@ function lsLoad(key, fallback) {
 }
 function lsSave(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
+
+let __teacherListMapPromise = null;
+async function loadTeacherListMap() {
+  if (__teacherListMapPromise) return __teacherListMapPromise;
+  __teacherListMapPromise = (async () => {
+    try {
+      const res = await fetch('teacher_list.csv', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const items = parseTeacherListCSV(text);
+      const map = new Map();
+      items.forEach(it => {
+        const clsVal = parseInt(it.cls, 10);
+        if (!Number.isFinite(clsVal) || !it.teacher) return;
+        const gradeVal = it.grade == null ? null : parseInt(it.grade, 10);
+        if (Number.isFinite(gradeVal)) map.set(gradeVal + '_' + clsVal, it.teacher);
+        else map.set('*_' + clsVal, it.teacher);
+      });
+      return map;
+    } catch (e) {
+      return new Map();
+    }
+  })();
+  return __teacherListMapPromise;
+}
+
+function parseTeacherListCSV(text) {
+  const lines = String(text || '').replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const rows = [];
+  for (let i=0;i<lines.length;i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    rows.push(line.split(',').map(x=>String(x).trim()));
+  }
+  if (rows.length === 0) return [];
+  const header = rows[0].map(x=>x.replace(/\s/g,''));
+  const hiGrade = header.findIndex(x => x==='학년');
+  const hiCls = header.findIndex(x => x==='반');
+  const hiTeacher = header.findIndex(x => x==='담임' || x==='담임교사' || x==='담임교사명');
+  const hasHeader = hiCls >= 0 && hiTeacher >= 0;
+  const start = hasHeader ? 1 : 0;
+  const gi = hasHeader ? hiGrade : -1;
+  const ci = hasHeader ? hiCls : 0;
+  const ti = hasHeader ? hiTeacher : 1;
+  const out = [];
+  for (let i=start;i<rows.length;i++) {
+    const r = rows[i];
+    const grade = gi >= 0 ? String(r[gi] ?? '').trim() : '';
+    const cls = String(r[ci] ?? '').trim();
+    const teacher = String(r[ti] ?? '').trim();
+    if (!cls || !teacher) continue;
+    out.push({ grade: grade ? (parseInt(grade,10) || null) : null, cls: parseInt(cls,10) || null, teacher });
+  }
+  return out;
 }
 
 let adm     = lsLoad(LS_ADM, DEFAULT_ADM);
@@ -1240,7 +1295,7 @@ function renderXlPreview() {
   document.getElementById('xl-preview-wrap').innerHTML = html;
 }
 
-function xlImport() {
+async function xlImport() {
   const {gi, ci, ni, mi} = getXlColVals();
   const groups = {};
   xlRawData.forEach(row => {
@@ -1262,14 +1317,19 @@ function xlImport() {
 
   if (!keys.length) { showToast('가져올 데이터가 없습니다'); return; }
 
-  // replace classes
-  classes = keys.map((k, i) => ({
-    id: Date.now() + i,
-    grade: groups[k].grade,
-    cls: groups[k].cls,
-    teacher: '',
-    students: groups[k].students
-  }));
+  const teacherListMap = await loadTeacherListMap();
+  classes = keys.map((k, i) => {
+    const gradeVal = groups[k].grade;
+    const clsVal = groups[k].cls;
+    const t = (teacherListMap.get(gradeVal + '_' + clsVal) || teacherListMap.get('*_' + clsVal) || '');
+    return {
+      id: Date.now() + i,
+      grade: gradeVal,
+      cls: clsVal,
+      teacher: t,
+      students: groups[k].students
+    };
+  });
 
   selAdm = classes[0].id;
   att = {};
@@ -1743,10 +1803,14 @@ async function initApp() {
       if (c.teacher) teacherMap.set(g + '_' + k, c.teacher);
     });
 
+    const teacherListMap = await loadTeacherListMap();
+
     const csvClasses = await loadClassesFromStudentListCSV();
     if (csvClasses && csvClasses.length) {
       classes = csvClasses.map(c => {
-        const t = teacherMap.get(parseInt(c.grade,10) + '_' + parseInt(c.cls,10)) || '';
+        const g = parseInt(c.grade, 10);
+        const k = parseInt(c.cls, 10);
+        const t = teacherMap.get(g + '_' + k) || teacherListMap.get(g + '_' + k) || teacherListMap.get('*_' + k) || '';
         return { ...c, teacher: c.teacher || t };
       });
       lsSave(LS_CLS, classes);
